@@ -1,0 +1,6 @@
+﻿ytdnd/
+__pycache__/
+*.pyc
+downloads/
+.vscode/
+venv/

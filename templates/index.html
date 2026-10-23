@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Video Downloader</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🎬 YT Video Downloader</h1>
+            <p class="subtitle">Download YouTube videos as MP4 or extract audio as MP3.</p>
+            <div class="input-group">
+                <label>YouTube URL</label>
+                <input id="youtube_url" type="url" placeholder="https://youtube.com/watch?v=...">
+            </div>
+            <div class="input-group">
+                <label>Select Format</label>
+                <select id="format">
+                    <option value="mp4">📹 MP4 Video</option>
+                    <option value="mp3">🎵 MP3 Audio</option>
+                </select>
+            </div>
+            <button id="downloadBtn" onclick="handleDownload()">
+                <span id="btnText">Download Now</span>
+                <span id="btnSpinner" class="spinner hidden"></span>
+            </button>
+            <div id="statusMsg" class="status-msg hidden"></div>
+        </div>
+    </div>
+    <script>
+        async function handleDownload() {
+            const url = document.getElementById("youtube_url").value.trim();
+            const fmt = document.getElementById("format").value;
+            const btn = document.getElementById("downloadBtn");
+            const text = document.getElementById("btnText");
+            const spin = document.getElementById("btnSpinner");
+
+            if (!url) { showStatus("Please enter URL", "error"); return; }
+
+            btn.disabled = true;
+            text.textContent = "Processing…";
+            spin.classList.remove("hidden");
+
+            try {
+                const formData = new FormData();
+                formData.append("youtube_url", url);
+                formData.append("fmt", fmt);
+
+                // FINAL FIX: Live Server (5501) aur 8000 dono ke liye kaam karega + Deploy pe bhi
+                const API_URL = window.location.port === "5501" ? "http://127.0.0.1:8000/convert" : "/convert";
+
+                const response = await fetch(API_URL, { method: "POST", body: formData });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({ error: "Unknown error." }));
+                    showStatus("❌ " + data.error, "error");
+                    return;
+                }
+                const blob = await response.blob();
+                const disposition = response.headers.get("Content-Disposition") || "";
+                const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^;"'\n]+)["']?/i);
+                const filename = match ? decodeURIComponent(match[1]) : `download.${fmt}`;
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = blobUrl; a.download = filename;
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(blobUrl);
+                showStatus("✅ Download started!", "success");
+            } catch (err) {
+                showStatus("❌ Network error: " + err.message, "error");
+            } finally {
+                btn.disabled = false;
+                text.textContent = "Download Now";
+                spin.classList.add("hidden");
+            }
+        }
+        function showStatus(msg, type) {
+            const el = document.getElementById("statusMsg");
+            el.textContent = msg;
+            el.className = "status-msg " + type;
+            el.classList.remove("hidden");
+        }
+    </script>
+</body>
+</html>
