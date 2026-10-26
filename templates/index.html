@@ -1,87 +1,86 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YT Video Downloader</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <div class="card">
-            <h1>🎬 YT Video Downloader</h1>
-            <p class="subtitle">Download YouTube videos as MP4 or extract audio as MP3.</p>
-            <div class="input-group">
-                <label>YouTube URL</label>
-                <input id="youtube_url" type="url" placeholder="https://youtube.com/watch?v=...">
-            </div>
-            <div class="input-group">
-                <label>Select Format</label>
-                <select id="format">
-                    <option value="mp4">📹 MP4 Video</option>
-                    <option value="mp3">🎵 MP3 Audio</option>
+        <h1>YT Video Downloader</h1>
+        <p>Paste YouTube link below</p>
+        
+        <form id="downloadForm">
+            <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+            <div class="format-box">
+                <select id="format" name="format">
+                    <option value="mp4">MP4 - Video</option>
+                    <option value="mp3">MP3 - Audio</option>
                 </select>
             </div>
-            <button id="downloadBtn" onclick="handleDownload()">
-                <span id="btnText">Download Now</span>
-                <span id="btnSpinner" class="spinner hidden"></span>
-            </button>
-            <div id="statusMsg" class="status-msg hidden"></div>
-        </div>
+            <button type="submit" id="btn">Download</button>
+        </form>
+
+        <div id="status"></div>
+        <div id="result"></div>
     </div>
-    <script>
-        async function handleDownload() {
-            const url = document.getElementById("youtube_url").value.trim();
-            const fmt = document.getElementById("format").value;
-            const btn = document.getElementById("downloadBtn");
-            const text = document.getElementById("btnText");
-            const spin = document.getElementById("btnSpinner");
 
-            if (!url) { showStatus("Please enter URL", "error"); return; }
+<script>
+const form = document.getElementById('downloadForm');
+const statusDiv = document.getElementById('status');
+const resultDiv = document.getElementById('result');
+const btn = document.getElementById('btn');
 
-            btn.disabled = true;
-            text.textContent = "Processing…";
-            spin.classList.remove("hidden");
+// FIX: type ki jagah statusType use kiya - ye tera wala bug tha
+function showStatus(message, statusType) {
+    statusDiv.style.display = 'block';
+    statusDiv.textContent = message;
+    if (statusType === 'error') {
+        statusDiv.className = 'error';
+    } else if (statusType === 'success') {
+        statusDiv.className = 'success';
+    } else {
+        statusDiv.className = 'info';
+    }
+}
 
-            try {
-                const formData = new FormData();
-                formData.append("youtube_url", url);
-                formData.append("fmt", fmt);
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = document.getElementById('url').value;
+    const format = document.getElementById('format').value;
 
-                // FINAL FIX: Live Server (5501) aur 8000 dono ke liye kaam karega + Deploy pe bhi
-                const API_URL = window.location.port === "5501" ? "http://127.0.0.1:8000/convert" : "/convert";
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    resultDiv.innerHTML = '';
+    showStatus('Fetching video info, please wait...', 'info');
 
-                const response = await fetch(API_URL, { method: "POST", body: formData });
+    try {
+        const formData = new FormData();
+        formData.append('url', url);
+        formData.append('format', format);
 
-                if (!response.ok) {
-                    const data = await response.json().catch(() => ({ error: "Unknown error." }));
-                    showStatus("❌ " + data.error, "error");
-                    return;
-                }
-                const blob = await response.blob();
-                const disposition = response.headers.get("Content-Disposition") || "";
-                const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^;"'\n]+)["']?/i);
-                const filename = match ? decodeURIComponent(match[1]) : `download.${fmt}`;
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = blobUrl; a.download = filename;
-                document.body.appendChild(a); a.click(); a.remove();
-                URL.revokeObjectURL(blobUrl);
-                showStatus("✅ Download started!", "success");
-            } catch (err) {
-                showStatus("❌ Network error: " + err.message, "error");
-            } finally {
-                btn.disabled = false;
-                text.textContent = "Download Now";
-                spin.classList.add("hidden");
-            }
+        const response = await fetch('/convert', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Server error');
         }
-        function showStatus(msg, typegit) {
-            const el = document.getElementById("statusMsg");
-            el.textContent = msg;
-            el.className = "status-msg " + type;
-            el.classList.remove("hidden");
-        }
-    </script>
+
+        showStatus('Ready! Click to download', 'success');
+        resultDiv.innerHTML = `<a href="/download?file=${encodeURIComponent(data.file)}" class="download-btn" download>Download ${data.title}</a>`;
+        
+    } catch (err) {
+        showStatus(err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Download';
+    }
+});
+</script>
 </body>
 </html>
