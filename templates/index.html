@@ -1,85 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YT Video Downloader</title>
-    <link rel="stylesheet" href="/static/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YT Video Downloader</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>YT Video Downloader</h1>
-        <p>Paste YouTube link below</p>
-        
-        <form id="downloadForm">
-            <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
-            <div class="format-box">
-                <select id="format" name="format">
-                    <option value="mp4">MP4 - Video</option>
-                    <option value="mp3">MP3 - Audio</option>
-                </select>
-            </div>
-            <button type="submit" id="btn">Download</button>
-        </form>
-
-        <div id="status"></div>
-        <div id="result"></div>
-    </div>
-
+<div class="container">
+<h1>YT Video Downloader</h1>
+<p>Paste YouTube link below</p>
+<form id="downloadForm">
+<input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+<select id="format" name="format">
+<option value="mp4">MP4 - Video</option>
+<option value="mp3">MP3 - Audio</option>
+</select>
+<button type="submit" id="btn">Download</button>
+</form>
+<div id="status"></div>
+<div id="result"></div>
+</div>
 <script>
-const form = document.getElementById('downloadForm');
-const statusDiv = document.getElementById('status');
-const resultDiv = document.getElementById('result');
-const btn = document.getElementById('btn');
-
-// FIX: type ki jagah statusType use kiya - ye tera wala bug tha
-function showStatus(message, statusType) {
-    statusDiv.style.display = 'block';
-    statusDiv.textContent = message;
-    if (statusType === 'error') {
-        statusDiv.className = 'error';
-    } else if (statusType === 'success') {
-        statusDiv.className = 'success';
-    } else {
-        statusDiv.className = 'info';
-    }
-}
-
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const url = document.getElementById('url').value;
-    const format = document.getElementById('format').value;
-
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-    resultDiv.innerHTML = '';
-    showStatus('Fetching video info, please wait...', 'info');
-
-    try {
-        const formData = new FormData();
-        formData.append('url', url);
-        formData.append('format', format);
-
-        const response = await fetch('/convert', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Server error');
-        }
-
-        showStatus('Ready! Click to download', 'success');
-        resultDiv.innerHTML = `<a href="/download?file=${encodeURIComponent(data.file)}" class="download-btn" download>Download ${data.title}</a>`;
-        
-    } catch (err) {
-        showStatus(err.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Download';
-    }
+const form=document.getElementById('downloadForm'),statusDiv=document.getElementById('status'),resultDiv=document.getElementById('result'),btn=document.getElementById('btn');
+function showStatus(m,t){statusDiv.style.display='block';statusDiv.textContent=m;statusDiv.className=t;}
+form.addEventListener('submit',async(e)=>{
+e.preventDefault();
+const url=document.getElementById('url').value.trim().split('?si=')[0];
+const format=document.getElementById('format').value;
+btn.disabled=true;btn.textContent='Processing...';resultDiv.innerHTML='';showStatus('Fetching... 30 sec lag sakta hai','info');
+try{
+const fd=new FormData();fd.append('url',url);fd.append('format',format);
+const r=await fetch('/convert',{method:'POST',body:fd});const d=await r.json();
+if(!r.ok) throw new Error(d.error);showStatus('Ready!','success');resultDiv.innerHTML=`<a href="/download?file=${encodeURIComponent(d.file)}" class="download-btn" download>⬇️ Download ${d.title}</a>`;
+}catch(err){showStatus('ERROR: '+err.message,'error');}finally{btn.disabled=false;btn.textContent='Download';}
 });
 </script>
 </body>
