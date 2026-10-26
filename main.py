@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import yt_dlp, os, uuid, shutil
+
 app = FastAPI()
 os.makedirs("downloads", exist_ok=True)
 templates = Jinja2Templates(directory="templates")
@@ -13,7 +14,7 @@ def clean_url(url: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 @app.post("/convert")
 async def convert(url: str = Form(...), format: str = Form(...)):
@@ -27,14 +28,10 @@ async def convert(url: str = Form(...), format: str = Form(...)):
             'retries': 10,
             'extractor_args': {
                 'youtube': {
-                    # android = bot check bypass, mweb = no PO token needed
                     'player_client': ['android', 'mweb', 'ios'],
-                    'player_skip': ['webpage'],
                 }
             },
-            'js_runtimes': {'node': {}},
         }
-        # cookies hai toh use karo, nahi hai toh bhi chalega
         if os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = 'cookies.txt'
 
