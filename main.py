@@ -9,11 +9,7 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 def clean_url(url: str):
-    url = url.split("?si=")[0].split("&si=")[0]
-    if "/shorts/" in url:
-        vid = url.split("/shorts/")[1].split("?")[0].split("/")[0]
-        return f"https://www.youtube.com/watch?v={vid}"
-    return url.strip()
+    return url.split("?si=")[0].split("&si=")[0].strip()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -24,23 +20,29 @@ async def convert(url: str = Form(...), format: str = Form(...)):
     try:
         url = clean_url(url)
         file_id = str(uuid.uuid4())
+        
+        # Agar cookies hai to web client, nahi to android - yehi fix hai
+        if os.path.exists("cookies.txt"):
+            player_clients = ['web']
+        else:
+            player_clients = ['android', 'web']
+
         ydl_opts = {
             'outtmpl': f'downloads/{file_id}.%(ext)s',
             'noplaylist': True,
             'quiet': True,
             'retries': 10,
-            'extractor_args': {'youtube': {'player_client': ['android','web']}},
+            'extractor_args': {'youtube': {'player_client': player_clients}},
         }
         if os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = 'cookies.txt'
 
-        # SABSE SIMPLE FORMAT - kabhi fail nahi hoga
         if format == "mp3":
             ydl_opts['format'] = 'bestaudio/best'
             if shutil.which("ffmpeg"):
                 ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
         else:
-            ydl_opts['format'] = 'best' # best matlab jo bhi mile mp4/webm sab chalega
+            ydl_opts['format'] = 'best[ext=mp4]/best'
             ydl_opts['merge_output_format'] = 'mp4'
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -48,9 +50,9 @@ async def convert(url: str = Form(...), format: str = Form(...)):
             for f in os.listdir("downloads"):
                 if f.startswith(file_id):
                     return {"status":"success","file": os.path.join("downloads",f),"title": info.get('title','video')}
-        raise Exception("File not found after download")
+        raise Exception("File not found")
     except Exception as e:
-        print(e)
+        print(f"ERROR: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/download")
