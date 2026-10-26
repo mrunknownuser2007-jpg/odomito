@@ -5,15 +5,24 @@ from fastapi.templating import Jinja2Templates
 import yt_dlp
 import os
 import uuid
+import re
 import shutil
 
 app = FastAPI()
-
-# Folders create karo
 os.makedirs("downloads", exist_ok=True)
-
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+def clean_url(url: str) -> str:
+    # si= parameter aur extra cheeze hatao, shorts ko normal banao
+    url = url.strip()
+    url = re.sub(r'\?si=.*', '', url)
+    url = re.sub(r'&si=.*', '', url)
+    # youtu.be/shorts/ ko handle karo
+    if "/shorts/" in url:
+        video_id = url.split("/shorts/")[1].split("?")[0].split("/")[0]
+        url = f"https://www.youtube.com/watch?v={video_id}"
+    return url
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -22,72 +31,84 @@ async def home(request: Request):
 @app.post("/convert")
 async def convert(url: str = Form(...), format: str = Form(...)):
     try:
+        url = clean_url(url)
         file_id = str(uuid.uuid4())
-        
-        # FIX 1: YouTube bot block bypass
+
+        # SABSE STRONG YDL OPTIONS - Bot + Format dono fix
         ydl_opts = {
             'outtmpl': f'downloads/{file_id}.%(ext)s',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            # Ye 3 lines Render ke bot issue ko fix karengi
+            'retries': 10,
+            'fragment_retries': 10,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
-                    'player_skip': ['webpage', 'configs'],
+                    'player_client': ['android', 'web', 'ios'],
+                    'player_skip': ['webpage'],
                 }
             },
-            'extractor_retries': 3,
             'http_headers': {
-                'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; SM-G998B) gzip',
+                'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12) gzip',
             }
         }
 
-        # Check karo cookies.txt hai kya
         if os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = 'cookies.txt'
 
+        # FORMAT FIX - yehi tera error tha
+        has_ffmpeg = shutil.which("ffmpeg") is not None
+        
         if format == "mp3":
-            ydl_opts.update({
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            })
-        else:
+            if has_ffmpeg:
+                ydl_opts.update({
+                    'format': 'bestaudio/best',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                })
+            else:
+                # Agar ffmpeg nahi hai to m4a dega, jo phone me mp3 jaisa hi bajega
+                ydl_opts.update({
+                    'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                })
+        else: # mp4
             ydl_opts.update({
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'merge_output_format': 'mp4',
             })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            # Downloaded file ka naam nikalo
-            filename = ydl.prepare_filename(info)
-            if format == "mp3":
-                filename = os.path.splitext(filename)[0] + ".mp3"
+            # final file dhundo
+            downloaded_file = None
+            for f in os.listdir("downloads"):
+                if f.startswith(file_id):
+                    downloaded_file = os.path.join("downloads", f)
+                    break
             
-            # Agar file mp4 me bhi .webm hai toh usko dhundo
-            if not os.path.exists(filename):
-                # fallback check
-                for f in os.listdir("downloads"):
-                    if f.startswith(file_id):
-                        filename = os.path.join("downloads", f)
-                        break
+            if not downloaded_file:
+                raise Exception("Download hua par file nahi mili")
 
-        return {"status": "success", "file": filename, "title": info.get('title', 'video')}
+        return {"status": "success", "file": downloaded_file, "title": info.get('title', 'video')}
 
     except Exception as e:
-        error_msg = str(e)
-        print(f"ERROR: {error_msg}")
-        # User ko saaf error bhejo
-        if "Sign in to confirm" in error_msg or "bot" in error_msg:
-            return JSONResponse(status_code=500, content={"error": "YouTube is blocking server IP. Please try again after 2 mins or try different video."})
-        return JSONResponse(status_code=500, content={"error": error_msg})
+        print(f"ERROR FULL: {e}")
+        msg = str(e)
+        # User friendly error
+        if "Sign in" in msg or "bot" in msg:
+            msg = "YouTube ne server ko block kiya. 2 min baad try karo ya cookies.txt add karo."
+        elif "format is not available" in msg:
+            msg = "Ye format available nahi hai, MP4 try karo."
+        return JSONResponse(status_code=500, content={"error": msg})
 
 @app.get("/download")
 async def download_file(file: str):
+    # Security: sirf downloads folder ki file
+    if not file.startswith("downloads/"):
+        return JSONResponse(status_code=400, content={"error": "Invalid file"})
     if os.path.exists(file):
         return FileResponse(file, filename=os.path.basename(file), media_type='application/octet-stream')
     return JSONResponse(status_code=404, content={"error": "File not found"})
