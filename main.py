@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import yt_dlp, os, uuid, re, shutil
+import yt_dlp, os, uuid, shutil
 app = FastAPI()
 os.makedirs("downloads", exist_ok=True)
 templates = Jinja2Templates(directory="templates")
@@ -20,20 +20,21 @@ async def convert(url: str = Form(...), format: str = Form(...)):
     try:
         url = clean_url(url)
         file_id = str(uuid.uuid4())
-        
-        # Agar cookies hai to web client, nahi to android - yehi fix hai
-        if os.path.exists("cookies.txt"):
-            player_clients = ['web']
-        else:
-            player_clients = ['android', 'web']
-
         ydl_opts = {
             'outtmpl': f'downloads/{file_id}.%(ext)s',
             'noplaylist': True,
             'quiet': True,
             'retries': 10,
-            'extractor_args': {'youtube': {'player_client': player_clients}},
+            'extractor_args': {
+                'youtube': {
+                    # android = bot check bypass, mweb = no PO token needed
+                    'player_client': ['android', 'mweb', 'ios'],
+                    'player_skip': ['webpage'],
+                }
+            },
+            'js_runtimes': {'node': {}},
         }
+        # cookies hai toh use karo, nahi hai toh bhi chalega
         if os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = 'cookies.txt'
 
@@ -43,7 +44,6 @@ async def convert(url: str = Form(...), format: str = Form(...)):
                 ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
         else:
             ydl_opts['format'] = 'best[ext=mp4]/best'
-            ydl_opts['merge_output_format'] = 'mp4'
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
