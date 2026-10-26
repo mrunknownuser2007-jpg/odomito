@@ -4,3 +4,4 @@ yt-dlp
 jinja2
 python-multipart
 bgutil-ytdlp-pot-provider
+requests
